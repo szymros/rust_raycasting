@@ -48,14 +48,14 @@ impl Player {
     }
 
     fn handle_input(&mut self, raylib_handle: &RaylibHandle) {
-        let speed = 0.1;
+        let speed = 0.5;
         if raylib_handle.is_key_down(raylib::consts::KeyboardKey::KEY_E) {
-            let rotation_matrix = get_rotation_matrix(0.1);
+            let rotation_matrix = get_rotation_matrix(0.5);
             self.dir = (rotation_matrix * self.dir).normalize();
             self.plane = rotation_matrix * self.plane;
         }
         if raylib_handle.is_key_down(raylib::consts::KeyboardKey::KEY_Q) {
-            let rotation_matrix = get_rotation_matrix(-0.1);
+            let rotation_matrix = get_rotation_matrix(-0.5);
             self.dir = (rotation_matrix * self.dir).normalize();
             self.plane = rotation_matrix * self.plane;
         }
@@ -126,32 +126,24 @@ fn draw_grid(draw_handle: &mut RaylibDrawHandle, player: &Player) {
     }
 }
 
-fn draw(draw_handle: &mut RaylibDrawHandle, player: &Player, show_map: bool) {
+fn draw(draw_handle: &mut RaylibDrawHandle, player: &Player, show_map: bool, texture: &mut Image) {
     draw_handle.clear_background(Color::WHITE);
     if show_map {
         draw_grid(draw_handle, player);
     } else {
-        let line_heights = cast_rays(&player);
-        for (idx, line_height) in line_heights.iter().enumerate() {
-            let line_start: i32 = -line_height / 2 + SCREEN_HEIGHT / 2 as i32;
-            let line_end: i32 = line_height / 2 + SCREEN_HEIGHT / 2 as i32;
-            draw_handle.draw_line(
-                idx as i32,
-                if line_start > 0 { line_start } else { 0 },
-                idx as i32,
-                if line_end < SCREEN_HEIGHT {
-                    line_end
-                } else {
-                    SCREEN_HEIGHT
-                },
-                Color::BLUE,
-            );
+        let (line_heights, pixel_buffer) = cast_rays(&player, texture);
+        for x in 0..SCREEN_WIDTH {
+            for y in 0..SCREEN_HEIGHT {
+                draw_handle.draw_pixel(x, y, pixel_buffer[x as usize][y as usize])
+            }
         }
     }
 }
 
-fn cast_rays(player: &Player) -> Vec<i32> {
+fn cast_rays(player: &Player, texture: &mut Image) -> Vec<Vec<Color>> {
     let mut line_heights: Vec<i32> = Vec::new();
+    let mut pixel_buffer =
+        vec![vec![Color::new(0, 0, 0, 0); SCREEN_HEIGHT as usize]; SCREEN_WIDTH as usize];
     for x in 0..SCREEN_WIDTH {
         let camera_space_x = 2.00 * x as f32 / SCREEN_WIDTH as f32 - 1.0;
         let ray_dir_x = player.dir.x + player.plane.x * camera_space_x;
@@ -198,32 +190,56 @@ fn cast_rays(player: &Player) -> Vec<i32> {
             }
         }
         let ray_lenght: f32;
+        let mut tex_cord_x: f32;
         if side == 0 {
             ray_lenght = side_lenght_x - delta_x;
+            tex_cord_x = player.pos.y + ray_lenght * ray_dir_y;
         } else {
             ray_lenght = side_lenght_y - delta_y;
+            tex_cord_x = player.pos.x + ray_lenght * ray_dir_x;
         }
         let line_height = SCREEN_HEIGHT as f32 / ray_lenght;
         line_heights.push(line_height as i32);
+        tex_cord_x = (tex_cord_x - tex_cord_x.floor()) * texture.width as f32;
+        let mut line_start: i32 = -line_height as i32 / 2 + SCREEN_HEIGHT / 2 as i32;
+        let mut line_end: i32 = line_height as i32 / 2 + SCREEN_HEIGHT / 2 as i32;
+        if line_start < 0 {
+            line_start = 0;
+        };
+        if line_end > SCREEN_HEIGHT {
+            line_end = SCREEN_HEIGHT
+        };
+        let tex_to_screen = texture.height as f32 / line_height as f32;
+        let mut tex_pos =
+            (line_start - SCREEN_HEIGHT / 2 + line_height as i32 / 2) as f32 * tex_to_screen;
+        for y in line_start..line_end {
+            let ty: i32;
+            if (tex_pos as i32) < texture.height {
+                ty = tex_pos as i32;
+            } else {
+                ty = texture.height - 1;
+            };
+            pixel_buffer[x as usize][y as usize] = texture.get_color(tex_cord_x as i32, ty as i32);
+            tex_pos += tex_to_screen;
+        }
     }
-    return line_heights;
+    return pixel_buffer;
 }
 
 fn main() {
     let mut player = Player::new([4.0, 4.0].into(), [1.0, 0.0].into());
     let mut show_map = true;
-
     let (mut rl, thread) = raylib::init()
         .size(SCREEN_WIDTH, SCREEN_HEIGHT)
         .title("Hello, World")
         .build();
-
+    let mut image = raylib::core::texture::Image::load_image("./greystone.png").unwrap();
     while !rl.window_should_close() {
         player.handle_input(&rl);
         if rl.is_key_down(raylib::consts::KeyboardKey::KEY_TAB) {
             show_map = !show_map;
         }
         let mut draw_handle = rl.begin_drawing(&thread);
-        draw(&mut draw_handle, &player, show_map);
+        draw(&mut draw_handle, &player, show_map, &mut image);
     }
 }
