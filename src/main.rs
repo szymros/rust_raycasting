@@ -270,8 +270,10 @@ fn main() {
         .size(SCREEN_WIDTH, SCREEN_HEIGHT)
         .title("Hello, World")
         .build();
-    let mut wall_texture = raylib::core::texture::Image::load_image("./greystone.png").unwrap();
-    let mut floor_texture = raylib::core::texture::Image::load_image("./wood.png").unwrap();
+    let mut wall_texture =
+        raylib::core::texture::Image::load_image("./textures/texture1.png").unwrap();
+    let mut floor_texture =
+        raylib::core::texture::Image::load_image("./textures/texture2.png").unwrap();
     rl.hide_cursor();
     let mut last_frame_time = rl.get_time();
     while !rl.window_should_close() {
