@@ -150,7 +150,6 @@ fn draw(
 }
 
 fn cast_rays(player: &Player, texture: &mut Image, pixel_buffer: &mut Vec<Vec<Color>>) {
-    let mut line_heights: Vec<i32> = Vec::new();
     for x in 0..SCREEN_WIDTH {
         let camera_space_x = 2.00 * x as f32 / SCREEN_WIDTH as f32 - 1.0;
         let ray_dir_x = player.dir.x + player.plane.x * camera_space_x;
