@@ -126,12 +126,21 @@ fn draw_grid(draw_handle: &mut RaylibDrawHandle, player: &Player) {
     }
 }
 
-fn draw(draw_handle: &mut RaylibDrawHandle, player: &Player, show_map: bool, texture: &mut Image) {
+fn draw(
+    draw_handle: &mut RaylibDrawHandle,
+    player: &Player,
+    show_map: bool,
+    wall_texture: &mut Image,
+    floor_texture: &mut Image,
+) {
+    let mut pixel_buffer =
+        vec![vec![Color::new(0, 0, 0, 0); SCREEN_HEIGHT as usize]; SCREEN_WIDTH as usize];
     draw_handle.clear_background(Color::WHITE);
     if show_map {
         draw_grid(draw_handle, player);
     } else {
-        let (line_heights, pixel_buffer) = cast_rays(&player, texture);
+        cast_floors(&player, floor_texture, &mut pixel_buffer);
+        cast_rays(&player, wall_texture, &mut pixel_buffer);
         for x in 0..SCREEN_WIDTH {
             for y in 0..SCREEN_HEIGHT {
                 draw_handle.draw_pixel(x, y, pixel_buffer[x as usize][y as usize])
@@ -140,10 +149,8 @@ fn draw(draw_handle: &mut RaylibDrawHandle, player: &Player, show_map: bool, tex
     }
 }
 
-fn cast_rays(player: &Player, texture: &mut Image) -> Vec<Vec<Color>> {
+fn cast_rays(player: &Player, texture: &mut Image, pixel_buffer: &mut Vec<Vec<Color>>) {
     let mut line_heights: Vec<i32> = Vec::new();
-    let mut pixel_buffer =
-        vec![vec![Color::new(0, 0, 0, 0); SCREEN_HEIGHT as usize]; SCREEN_WIDTH as usize];
     for x in 0..SCREEN_WIDTH {
         let camera_space_x = 2.00 * x as f32 / SCREEN_WIDTH as f32 - 1.0;
         let ray_dir_x = player.dir.x + player.plane.x * camera_space_x;
@@ -199,7 +206,6 @@ fn cast_rays(player: &Player, texture: &mut Image) -> Vec<Vec<Color>> {
             tex_cord_x = player.pos.x + ray_lenght * ray_dir_x;
         }
         let line_height = SCREEN_HEIGHT as f32 / ray_lenght;
-        line_heights.push(line_height as i32);
         tex_cord_x = (tex_cord_x - tex_cord_x.floor()) * texture.width as f32;
         let mut line_start: i32 = -line_height as i32 / 2 + SCREEN_HEIGHT / 2 as i32;
         let mut line_end: i32 = line_height as i32 / 2 + SCREEN_HEIGHT / 2 as i32;
@@ -223,7 +229,36 @@ fn cast_rays(player: &Player, texture: &mut Image) -> Vec<Vec<Color>> {
             tex_pos += tex_to_screen;
         }
     }
-    return pixel_buffer;
+}
+
+fn cast_floors(player: &Player, texture: &mut Image, pixel_buffer: &mut Vec<Vec<Color>>) {
+    let ray_dir_x_0 = player.dir.x - player.plane.x;
+    let ray_dir_y_0 = player.dir.y - player.plane.y;
+    let ray_dir_x_1 = player.dir.x + player.plane.x;
+    let ray_dir_y_1 = player.dir.y + player.plane.y;
+    for y in 0..SCREEN_HEIGHT {
+        let y_h = y - SCREEN_HEIGHT / 2;
+        let row_distance = 0.5 * SCREEN_HEIGHT as f32 / y_h as f32;
+        let step_x = row_distance * (ray_dir_x_1 - ray_dir_x_0) / SCREEN_WIDTH as f32;
+        let step_y = row_distance * (ray_dir_y_1 - ray_dir_y_0) / SCREEN_WIDTH as f32;
+        let mut current_x = player.pos.x + row_distance * ray_dir_x_0;
+        let mut current_y = player.pos.y + row_distance * ray_dir_y_0;
+        for x in 0..SCREEN_WIDTH {
+            let mut tx = texture.width as f32 * (current_x - current_x.floor());
+            let mut ty = texture.height as f32 * (current_y - current_y.floor());
+            if tx > texture.width as f32 {
+                tx = texture.width as f32 - 1.0;
+            }
+            if ty > texture.height as f32 {
+                ty = texture.height as f32 - 1.0;
+            }
+            current_x += step_x;
+            current_y += step_y;
+            pixel_buffer[x as usize][y as usize] = texture.get_color(tx as i32, ty as i32);
+            pixel_buffer[x as usize][(SCREEN_HEIGHT - y - 1) as usize] =
+                texture.get_color(tx as i32, ty as i32)
+        }
+    }
 }
 
 fn main() {
@@ -233,13 +268,21 @@ fn main() {
         .size(SCREEN_WIDTH, SCREEN_HEIGHT)
         .title("Hello, World")
         .build();
-    let mut image = raylib::core::texture::Image::load_image("./greystone.png").unwrap();
+    let mut wall_texture = raylib::core::texture::Image::load_image("./greystone.png").unwrap();
+    let mut floor_texture = raylib::core::texture::Image::load_image("./wood.png").unwrap();
+
     while !rl.window_should_close() {
         player.handle_input(&rl);
         if rl.is_key_down(raylib::consts::KeyboardKey::KEY_TAB) {
             show_map = !show_map;
         }
         let mut draw_handle = rl.begin_drawing(&thread);
-        draw(&mut draw_handle, &player, show_map, &mut image);
+        draw(
+            &mut draw_handle,
+            &player,
+            show_map,
+            &mut wall_texture,
+            &mut floor_texture,
+        )
     }
 }
